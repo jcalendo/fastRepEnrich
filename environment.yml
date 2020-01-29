@@ -1,0 +1,10 @@
+name: fastre
+channels:
+        - bioconda
+        - anaconda
+dependencies:
+        - python=3.8.1
+        - bedtools=2.29.2
+        - biopython=1.74
+        - samtools=1.9
+        - star=2.7.3a 
