@@ -218,9 +218,12 @@ def main():
     usage = 'python fastRE_count.py sampleName path/to/fastRE_Setup path/to/sampleName_unique.bam --threads 8 --summarize')
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')
     parser.add_argument('sampleName',help='The name of the sample to be processed. Typically the prefix of the unique.bam file.')
-    parser.add_argument('setupFolder',help='path to the fsatRE_Setup folder')
+    parser.add_argument('setupFolder',help='path to the fastRE_Setup folder')
     parser.add_argument('uniqueAlignmentFile', help='path/to/sampleName_unique.bam')
-    parser.add_argument('--mapq', default=0, metavar=0, type=int, help='The MAPQ threshold for multimapped reads, Should be one of [255, 3, 2, 1, 0]. STAR uses 255 to designate uniquely mapped reads. 3=Read maps to 2 locations, 2=Read maps to 3 locations, 1=Read maps to 4-9 locations, 0=Read maps to 10 or more locations.')
+    parser.add_argument('--mapq', default=0, metavar=0, type=int, help="""The MAPQ threshold for multimapped reads, Should be one of [255, 3, 2, 1, 0]. 
+    STAR uses 255 to designate uniquely mapped reads. 3=Read maps to 2 locations, 2=Read maps to 3 locations, 1=Read maps to 4-9 locations, 0=Read maps 
+    to 10 or more locations. The default is set to 0 to allow for all multimapped that align to the pseudogenome to be counted. This setting diverges 
+    from the original RepEnrich2 program since the aligners (STAR vs. bowtie2) use different MAPQ schemes.""")
     parser.add_argument('--pairedEnd', dest='pairedEnd', action='store_true', help='Designate this option for paired-end sequencing.')
     parser.add_argument('--threads', default=1, type=int, metavar=1, help='Number of threads to use for alignment with STAR.')
     parser.add_argument('--summarize', dest='summarize', action='store_true', help='In addition to the repeat name level output, produce collapsed counts at the class and family levels for each of the count types.')
@@ -241,8 +244,8 @@ def main():
     out_parent = Path(alignment_file).parent
     repnames_bedfile = Path(setup_folder, "repnames.bed")
     pseudogenome_STAR_idx = Path(setup_folder, "STAR_pseudogenome_idx")
-    se_fastq = Path(out_parent, sample_name + "_multimap.fastq")
-    fastq1 = Path(out_parent, sample_name + "_multimap_R1.fastq")
+    se_fastq = Path(out_parent, sample_name + "_multimap.fastq")   # The multi fastq files are expected to be in the same directory
+    fastq1 = Path(out_parent, sample_name + "_multimap_R1.fastq")  #   as the unique.bam file. This spec may change in the future
     fastq2 = Path(out_parent, sample_name + "_multimap_R2.fastq")
     total_counts_outfile = Path(out_parent, sample_name + "_total_counts.tsv")
     uniq_counts_outfile = Path(out_parent, sample_name + "_unique_counts.tsv")
