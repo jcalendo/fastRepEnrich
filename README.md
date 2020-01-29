@@ -5,6 +5,7 @@ A complete rewrite of [RepEnrich2](https://github.com/nerettilab/RepEnrich2) whi
 ## TODO:
 
 - Benchmark versions
+- Compare RepEnrich2 to fastRepEnrich results on real data
 - add tests
 
 ## Installation
@@ -63,14 +64,14 @@ STAR --runThreadN 8 \
 	--runMode genomeGenerate \
 	--genomeDir data/STAR_chr22_idx \
 	--genomeFastaFiles data/chr22.fa \
-	--sjdbGTFfile data/chr22.knownGenes.gtf \
-	--sjdbOverhang 74 \
-	--genomeSAindexNbases 11
+	--sjdbGTFfile data/chr22.knownGenes.gtf \  # GTF file can be ommitted
+	--sjdbOverhang 74 \                        # Specific to your reads (readLength - 1)
+	--genomeSAindexNbases 11                   # special setting for chr22
 ```
 
 ## 2. Map your samples to the genome, saving individual alignment results in each sample folder
 
-The `--outFilterMultimapNmax 100` flag allows reads to align to N (100) different loci before being flagged as unmapped. **This flag is necessary for downstream analysis as it allows for multimapping reads (the default is set to 20 if not explicitly set)**
+The `--outFilterMultimapNmax 100` flag allows reads to align to N (100) different loci before being flagged as unmapped. **This flag is necessary for downstream analysis as it allows for multimapping reads (the default is set to 20 if not explicitly set)**. Additionally, in order to mimic the behavior of `bowtie2` we set the alignment type to end-to-end wth the `--alignEndsType EndToEnd` flag. The default `STAR` alignment method is local with soft-clipping allowed.
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
@@ -80,7 +81,8 @@ for samp in $(cat data/sample-names.txt); do
 	--outSAMtype BAM Unsorted \
 	--outFilterMultimapNmax 100 \
 	--outMultimapperOrder Random \
-	--outFileNamePrefix data/${samp}/${samp}_;
+	--outFileNamePrefix data/${samp}/${samp}_ \
+	--alignEndsType EndToEnd;
 done
 ```
 
