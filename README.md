@@ -82,8 +82,9 @@ for samp in $(cat data/sample-names.txt); do
 	--outFilterMultimapNmax 100 \
 	--outMultimapperOrder Random \
 	--outFileNamePrefix data/${samp}/${samp}_ \
-	--alignEndsType EndToEnd
-	--alignIntronMin 1;
+	--alignEndsType EndToEnd \
+	--alignIntronMin 1 \
+	--alignIntronMax 1;
 done
 ```
 
