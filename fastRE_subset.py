@@ -5,21 +5,36 @@ from pathlib import Path
 from os import devnull, getcwd
 
 
-def get_unique(sample_name, alignment_file, threads):
+def get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end):
     """Subset unique reads from alignment file"""
     algn_parent = Path(alignment_file).parent
     uniq = Path(algn_parent, sample_name + "_unique.bam")
-    uniq_cmd = f"samtools view --threads {threads} -q 255 -b -o {uniq} {alignment_file}"
+
+    if bwt_mode:
+        if paired_end:
+            uniq_cmd = f"samtools view -f 3 -q {mapq} -b {uniq} {alignment_file}"
+        else:
+            uniq_cmd = f"samtools view -F 4 -q {mapq} -b -o {uniq} {alignment_file}"
+    else:
+        uniq_cmd = f"samtools view --threads {threads} -q {mapq} -b -o {uniq} {alignment_file}"
 
     print(f"Subsetting unique reads from {alignment_file}...")
     subprocess.run(uniq_cmd, shell=True)
 
 
-def get_multimapped(alignment_file, threads):
+def get_multimapped(alignment_file, threads, mapq, bwt_mode, paired_end):
     """Subset multi-mapped reads from the alignment file"""
     algn_parent = Path(alignment_file).parent
     multi_bam = Path(algn_parent, "_multi.bam")
-    multi_cmd = f"samtools view --threads {threads} -q 255 -b -U {multi_bam} {alignment_file} > {devnull}"
+    proper_pair = Path(algn_parent, "_proper_pair.bam")
+
+    if bwt_mode:
+        # create intermediete file of all reads in a proper pair
+        pp_cmd = f"samtools view --threads {threads} -f 3 -b -o {proper_pair} {alignment_file}"
+        subprocess.run(pp_cmd, shell=True)
+        multi_cmd = f"samtools view --threads {threads} -q {mapq} -b -U {multi_bam} {proper_pair} > {devnull}"
+    else:
+        multi_cmd = f"samtools view --threads {threads} -q {mapq} -b -U {multi_bam} {alignment_file} > {devnull}"
     
     print(f"Subsetting Multi-mapped reads...")
     subprocess.run(multi_cmd, shell=True)
@@ -33,6 +48,7 @@ def multi_to_fastq(sample_name, multi_bam, paired_end, alignment_file, threads):
     out_SE = Path(algn_parent, sample_name + "_multimap.fastq")
     out_R1 = Path(algn_parent, sample_name + "_multimap_R1.fastq")
     out_R2 = Path(algn_parent, sample_name + "_multimap_R2.fastq")
+    
     if not paired_end:
         print(f"Writing multi-mapped reads to {out_SE}...")
         fastq_cmd = f"samtools fastq --threads {threads} -F 0x900 {multi_bam} > {out_SE}"
@@ -51,10 +67,11 @@ def cleanup(alignment_file, debug):
     algn_parent = Path(alignment_file).parent
     srt_multi_bam = Path(algn_parent, "_sorted.multi.bam")
     multi_bam = Path(algn_parent, "_multi.bam")
+    pp_bam = Path(algn_parent, "_proper_pair.bam")
 
     if not debug:
         print("Performing cleanup of large intermediate files...")
-        subprocess.run(f"rm -f {multi_bam} {srt_multi_bam}", shell=True)
+        subprocess.run(f"rm -f {multi_bam} {srt_multi_bam} {pp_bam}", shell=True)
 
 
 def main():
@@ -66,6 +83,8 @@ def main():
     parser.add_argument('--pairedEnd', dest='pairedEnd', action='store_true', help='Designate this option for paired-end data.')
     parser.add_argument('--threads', default=0, type=int, metavar=0, help='Additional number of threads to use in samtools calls.')
     parser.add_argument('--debug', dest='debug', action='store_true', help='Select this option to prevent the removal of temporary files; useful for debugging')
+    parser.add_argument('--bowtieMode', action='store_true', help="Set this flag if you would like to use bowtie2 instead of STAR for all downstream analyses.")
+    parser.add_argument('--MAPQ', default=255, type=int, metavar=255, help="Set the MAPQ score for uniquely mapping reads. In STAR this value is 255. If bowtieMode is set then this value MUST be changed.")
     parser.set_defaults(pairedEnd=False, debug=False)
     args = parser.parse_args()
 
@@ -74,10 +93,12 @@ def main():
     paired_end = args.pairedEnd
     threads = args.threads
     debug = args.debug
-
+    bwt_mode = args.bowtieMode
+    mapq = args.MAPQ
+    
     # main subset routine -----------------------------------------------------
-    get_unique(sample_name, alignment_file, threads)
-    multi_path = get_multimapped(alignment_file, threads)
+    get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end)
+    multi_path = get_multimapped(alignment_file, threads, mapq, bwt_mode, paired_end)
     multi_to_fastq(sample_name, multi_path, paired_end, alignment_file, threads)
     cleanup(alignment_file, debug)
     print(f"Finished processing {sample_name}.")

@@ -196,22 +196,27 @@ def calculate_STAR_params(genome_fasta, read_len=150):
     return sa_idx_Nbases, chr_bin_Nbits
 
 
-def index_pseudogenomes(genome_dir, genome_fasta_file, SAindexNBases, chrBinNbits, threads=1):
+def index_pseudogenomes(genome_dir, genome_fasta_file, SAindexNBases, chrBinNbits, threads, bwt2_mode):
     """Create an index for each of the pseudogenome fasta files using STAR"""
-    print(f"Begin indexing pseudogenome : {genome_fasta_file} with STAR using {threads} threads...")
     print("#" * 80)
     if not Path(genome_dir).exists():
         Path(genome_dir).mkdir()
     
-    cmd = f"""STAR --runThreadN {threads} 
-                    --runMode 'genomeGenerate'
-                    --genomeDir {genome_dir} 
-                    --genomeFastaFiles {genome_fasta_file}
-                    --genomeSAindexNbases {SAindexNBases}
-                    --genomeChrBinNbits {chrBinNbits}
-                    """
-    command = split(cmd)
-    subprocess.run(command)
+    if bwt2_mode:
+        print(f"Begin indexing pseudogenome : {genome_fasta_file} with bowtie2 using {threads} threads...")
+        print("#" * 80)
+        cmd = f"'bowtie2-build -f --threads {threads} {genome_fasta_file} {genome_dir}"
+    else:
+        print(f"Begin indexing pseudogenome : {genome_fasta_file} with STAR using {threads} threads...")
+        print("#" * 80)
+        cmd = f"""STAR --runThreadN {threads} 
+                        --runMode 'genomeGenerate'
+                        --genomeDir {genome_dir} 
+                        --genomeFastaFiles {genome_fasta_file}
+                        --genomeSAindexNbases {SAindexNBases}
+                        --genomeChrBinNbits {chrBinNbits}
+                        """
+    subprocess.run(cmd, shell=True)
     print("#" * 80)
     print("Finished fastRE setup.")
 
@@ -226,7 +231,8 @@ def main():
     parser.add_argument('--gapLength', default=200, type=int, metavar='200', help='Length of the spacer used to build repeat psuedogeneomes.')
     parser.add_argument('--flankLength', default=25, type=int, metavar='25', help='Length of the flanking region adjacent to the repeat element that is used to build repeat psuedogenomes. The flanking length should be set according to the length of your reads.')
     parser.add_argument('--isBed', dest='isBed', action='store_true', help="Is the annotation file a bed file? Bedfiles are also a compatible format. The file needs to be a tab seperated .bed with optional fields. Ex. format: chr\\tstart\\tend\\trepeat_name\\tclass\\tfamily.")
-    parser.set_defaults(isBed=False)
+    parser.add_argument('--bowtieMode', action='store_true', help="Set this flag if you would like to use bowtie2 instead of STAR for all downstream analyses.")
+    parser.set_defaults(isBed=False, bowtie2Mode=False)
     args = parser.parse_args()
 
     # parameters and paths specified in args_parse
@@ -237,19 +243,27 @@ def main():
     setup_folder = args.setupFolder
     threads = args.threads
     is_bed = args.isBed
+    bwt2_mode = args.bowtieMode
 
     # main setup routine ------------------------------------------------------
 
     # prepare fileout locations
     pseudo_genome = Path(setup_folder, "pseudogenome.fasta")
-    STAR_idx_dir = Path(setup_folder, "STAR_pseudogenome_idx")
+    if bwt2_mode:
+        genome_dir = Path(setup_folder, "bwt2_pseudogenome_idx")
+    else:
+        genome_dir = Path(setup_folder, "STAR_pseudogenome_idx")
 
     # run setup routine
     create_setup_dir(setup_folder)
     repeat_data = process_annotation(annotation_file, setup_folder, is_bed)
-    generate_pseudogenomes(genome_fasta=genome_fasta, outfile=pseudo_genome, flank_length=flank_length, spacer_size=gap_length, repeat_dict=repeat_data, threads=threads)
+    generate_pseudogenomes(genome_fasta=genome_fasta, outfile=pseudo_genome, 
+                            flank_length=flank_length, spacer_size=gap_length, 
+                            repeat_dict=repeat_data, threads=threads)
     SAindexNBases, genomeChrBinNbits = calculate_STAR_params(pseudo_genome)
-    index_pseudogenomes(threads=threads, genome_dir=STAR_idx_dir, genome_fasta_file=pseudo_genome, SAindexNBases=SAindexNBases, chrBinNbits=genomeChrBinNbits)
+    index_pseudogenomes(threads=threads, genome_dir=genome_dir, 
+                        genome_fasta_file=pseudo_genome, SAindexNBases=SAindexNBases, 
+                        chrBinNbits=genomeChrBinNbits, mode=bwt2_mode)
 
 
 if __name__ == '__main__':
