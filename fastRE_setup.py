@@ -205,7 +205,7 @@ def index_pseudogenomes(genome_dir, genome_fasta_file, SAindexNBases, chrBinNbit
     if bwt2_mode:
         print(f"Begin indexing pseudogenome : {genome_fasta_file} with bowtie2 using {threads} threads...")
         print("#" * 80)
-        cmd = f"'bowtie2-build -f --threads {threads} {genome_fasta_file} {genome_dir}"
+        cmd = f"bowtie2-build -f --threads {threads} {genome_fasta_file} {Path(genome_dir, 'bwt2_idx')}"
     else:
         print(f"Begin indexing pseudogenome : {genome_fasta_file} with STAR using {threads} threads...")
         print("#" * 80)
