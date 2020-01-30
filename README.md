@@ -57,21 +57,21 @@ sample6
 
 ## 1. Create STAR idx for genome of interest
 
-This will be tailored to your reads. See the [STAR manual](https://github.com/alexdobin/STAR/blob/master/doc/STARmanual.pdf) for more details.
+This will be tailored to your reads. **Since we need to prohibit splicing, you should build the genome index without using a GTF file**. See the [STAR manual](https://github.com/alexdobin/STAR/blob/master/doc/STARmanual.pdf) for more details.
 
 ```bash
 STAR --runThreadN 8 \
 	--runMode genomeGenerate \
 	--genomeDir data/STAR_chr22_idx \
 	--genomeFastaFiles data/chr22.fa \
-	--sjdbGTFfile data/chr22.knownGenes.gtf \  # GTF file can be ommitted
-	--sjdbOverhang 74 \                        # Specific to your reads (readLength - 1)
-	--genomeSAindexNbases 11                   # special setting for chr22
+	--genomeSAindexNbases 11             # special setting for chr22
 ```
 
 ## 2. Map your samples to the genome, saving individual alignment results in each sample folder
 
-The `--outFilterMultimapNmax 100` flag allows reads to align to N (100) different loci before being flagged as unmapped. **This flag is necessary for downstream analysis as it allows for multimapping reads (the default is set to 20 if not explicitly set)**. Additionally, in order to mimic the behavior of `bowtie2` we set the alignment type to end-to-end wth the `--alignEndsType EndToEnd` flag. The default `STAR` alignment method is local with soft-clipping allowed.
+Using STAR for this kind of mapping does not confer any additional benefits over bowtie2 aside from speed. Please see the following links for more information. [link1](https://groups.google.com/forum/#!searchin/rna-star/CHIP-seq%7Csort:date/rna-star/Gq3Gf3NmDNc/yt8uJ1u4AQAJ) [link2](https://groups.google.com/forum/#!searchin/rna-star/repeat$20elements%7Csort:date/rna-star/TqOdXiEFYrI/tbzoK_AV4DQJ) [link3](https://www.biostars.org/p/344389/)
+
+The `--outFilterMultimapNmax 100` flag allows reads to align to N (100) different loci before being flagged as unmapped. **This flag is necessary for downstream analysis as it allows for multimapping reads (the default is set to 20 if not explicitly set)**. Additionally, in order to mimic the behavior of `bowtie2` we set the alignment type to end-to-end wth the `--alignEndsType EndToEnd` flag. The default `STAR` alignment method is local with soft-clipping allowed. We also set the `--alignIntronMin 1` flag to prohibit splicing.
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
@@ -82,7 +82,8 @@ for samp in $(cat data/sample-names.txt); do
 	--outFilterMultimapNmax 100 \
 	--outMultimapperOrder Random \
 	--outFileNamePrefix data/${samp}/${samp}_ \
-	--alignEndsType EndToEnd;
+	--alignEndsType EndToEnd
+	--alignIntronMin 1;
 done
 ```
 
