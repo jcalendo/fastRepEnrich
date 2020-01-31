@@ -171,7 +171,7 @@ def generate_pseudogenomes(genome_fasta, outfile, flank_length, spacer_size, rep
     print("Done.")
 
 
-def calculate_STAR_params(genome_fasta, read_len=150):
+def calculate_STAR_params(genome_fasta, bwt2_mode, read_len=150):
     """Calculate the optimal NBases for STAR given the genome size.
     
     For very samll genomes --genomeSAindexNBases must be scaled down. For genomes 
@@ -179,6 +179,9 @@ def calculate_STAR_params(genome_fasta, read_len=150):
     be scaled down. read_len arbitrarily set to 150. For large numbers of references 
     these values should not matter.
     """
+    if bwt2_mode:
+        return None, None
+
     print(f"Calculating parameters for STAR index...")
     total_len = 0
     num_records = 0
@@ -209,13 +212,8 @@ def index_pseudogenomes(genome_dir, genome_fasta_file, SAindexNBases, chrBinNbit
     else:
         print(f"Begin indexing pseudogenome : {genome_fasta_file} with STAR using {threads} threads...")
         print("#" * 80)
-        cmd = f"""STAR --runThreadN {threads} 
-                        --runMode 'genomeGenerate'
-                        --genomeDir {genome_dir} 
-                        --genomeFastaFiles {genome_fasta_file}
-                        --genomeSAindexNbases {SAindexNBases}
-                        --genomeChrBinNbits {chrBinNbits}
-                        """
+        cmd = f"STAR --runThreadN {threads} --runMode genomeGenerate --genomeDir {genome_dir} --genomeFastaFiles {genome_fasta_file} --genomeSAindexNbases {SAindexNBases} --genomeChrBinNbits {chrBinNbits}"
+
     subprocess.run(cmd, shell=True)
     print("#" * 80)
     print("Finished fastRE setup.")
@@ -226,7 +224,7 @@ def main():
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')
     parser.add_argument('annotationFile', help='The annotation file that contains repeat masker annotation for the genome of interest and may be downloaded at RepeatMasker.org. Example: hg38.fa.out. Custom bed files are also accepted.')
     parser.add_argument('genomeFasta', help='File name and path for genome of interest in fasta format. Example: /data/hg38.fa')
-    parser.add_argument('--setupFolder', default='fastRE_Setup', metavar='fastRE_Setup', help='Folder to save program output. Example: fastRE_Setup/. STAR_pseudogenome_idx will be saved in this directory.')
+    parser.add_argument('--setupFolder', default='fastRE_Setup', metavar='fastRE_Setup', help='Folder to save program output. Example: fastRE_Setup/. <STAR><bwt2>_pseudogenome_idx will be saved in this directory.')
     parser.add_argument('--threads', default=1, type=int, metavar='1', help='Number of cores to be used for STAR index building.')
     parser.add_argument('--gapLength', default=200, type=int, metavar='200', help='Length of the spacer used to build repeat psuedogeneomes.')
     parser.add_argument('--flankLength', default=25, type=int, metavar='25', help='Length of the flanking region adjacent to the repeat element that is used to build repeat psuedogenomes. The flanking length should be set according to the length of your reads.')
@@ -260,10 +258,10 @@ def main():
     generate_pseudogenomes(genome_fasta=genome_fasta, outfile=pseudo_genome, 
                             flank_length=flank_length, spacer_size=gap_length, 
                             repeat_dict=repeat_data, threads=threads)
-    SAindexNBases, genomeChrBinNbits = calculate_STAR_params(pseudo_genome)
+    SAindexNBases, genomeChrBinNbits = calculate_STAR_params(pseudo_genome, bwt2_mode)
     index_pseudogenomes(threads=threads, genome_dir=genome_dir, 
                         genome_fasta_file=pseudo_genome, SAindexNBases=SAindexNBases, 
-                        chrBinNbits=genomeChrBinNbits, mode=bwt2_mode)
+                        chrBinNbits=genomeChrBinNbits, bwt2_mode=bwt2_mode)
 
 
 if __name__ == '__main__':
