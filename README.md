@@ -1,9 +1,12 @@
-## Updating RepEnrich2 for Python 3.8 and STAR (RepEnrich2.38)
+## Updating RepEnrich2 for Python 3.7 and STAR
 
-A complete rewrite of [RepEnrich2](https://github.com/nerettilab/RepEnrich2) which is a continuation of [RepEnrich](https://github.com/nskvir/RepEnrich) based on [this publication](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4122776/). **I do not take any credit for the methods**, this repository is an extension of their package. I found the original source code to be difficult to modify and thus difficult to directly implement new features in, so instead of a fork, I decided to rewrite the package from scratch. `fastRepEnrich` is written in Python 3.8 and utilizes the STAR aligner. The main speed increases come from using [STAR](https://github.com/alexdobin/STAR) instead of [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml), utilizing Python builtins more effectively, and implementing multiprocessing during the pseudogenome building step.
+A complete rewrite of [RepEnrich2](https://github.com/nerettilab/RepEnrich2) which is a continuation of [RepEnrich](https://github.com/nskvir/RepEnrich) based on [this publication](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4122776/). **I do not take any credit for the methods**, this repository is an extension of their package. I found the original source code to be difficult to modify and thus difficult to directly implement new features in, so instead of a fork, I decided to rewrite the package from scratch. `fastRepEnrich` is written in Python 3.7 and utilizes the STAR aligner. The main speed increases come from using [STAR](https://github.com/alexdobin/STAR) instead of [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml), utilizing Python builtins more effectively, and implementing multiprocessing during the pseudogenome building step.
+
+bowtie2 can still be used in the pipeline by setting the `--bowtieMode` flag. 
 
 ## TODO:
 
+- Test full pipeline on real paired end data
 - Benchmark versions
 - Compare RepEnrich2 to fastRepEnrich results on real data
 - add tests
