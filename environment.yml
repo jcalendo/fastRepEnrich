@@ -3,8 +3,9 @@ channels:
         - bioconda
         - anaconda
 dependencies:
-        - python=3.8.1
+        - python=3.7
         - bedtools=2.29.2
         - biopython=1.74
         - samtools=1.9
-        - star=2.7.3a 
+        - star=2.7.3a
+        - bowtie2=2.3.5
