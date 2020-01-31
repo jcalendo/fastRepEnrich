@@ -36,7 +36,7 @@ def count_unique(coverage_results, debug):
     return counts
 
 
-def count_multi(tmp_alignment_file, mapq):
+def count_multi(tmp_alignment_file):
     """Create a dictionary of counts for reads mapped to pseudogenome."""
     print("Counting reads overlapped to pseudogenome...")
     counts = defaultdict(float)
@@ -48,15 +48,13 @@ def count_multi(tmp_alignment_file, mapq):
             else:
                 l = line.strip().split("\t")
                 rep_element = l[2]
-                flag = int(l[1])
-                map_q = int(l[4])
-                if map_q >= mapq:
+                if rep_element != "*":  # special check for bowtie2 output -- indicates not aligned to pseudogenome
                     counts[rep_element] += 1
 
     return counts
 
 
-def count_fractional(tmp_alignment_file, mapq):
+def count_fractional(tmp_alignment_file):
     """Return the fractional counts from the pseudo aligned reads by dividing the count of the elements
     by the number of subfamilies the read aligns to."""
     print("Computing fractional counts...")
@@ -70,10 +68,8 @@ def count_fractional(tmp_alignment_file, mapq):
             else:
                 l = line.strip().split("\t")
                 read_id = l[0]
-                flag = int(l[1])
                 rep_element = l[2]
-                map_q = int(l[4])
-                if map_q >= mapq: 
+                if rep_element != "*":  # special check for bowtie2 output -- indicates not aligned to pseudogenome
                     counts[read_id][rep_element] = 1  # every element gets numerator 1 (even if observed multiple times)
 
     for read_id in counts.keys():
@@ -116,27 +112,32 @@ def map_counts(multi_counts, element_mapper):
     return hierarchy
 
 
-def align_to_pseudogenome(pseudogenome_STAR_idx, multi_fastq, element_mapper, threads, debug, mapq):
+def align_to_pseudogenome(pseudogenome_idx, multi_fastq, element_mapper, threads, debug, bwt2_mode, k):
     """Align the multi mapping reads to the pseudo genome and return counts of reads uniquely mapping to pseudogenome"""
     multi_fastq_parent = Path(multi_fastq).parent
     out_dir = Path(multi_fastq_parent, "__tmp_pseudo_aligned")
     out_prefix = Path(out_dir, "__tmp_")
+    tmp_alignment_file = Path(out_dir, "__tmp_Aligned.out.sam")
+    bwt2_pseudo_log = Path(out_dir, '__bwt2_pseudo_alignment.log')
 
     if not Path(out_dir).exists():
         Path(out_dir).mkdir()
+
+    if bwt2_mode:
+        print(f"Aligning {multi_fastq} to pseudogenome using bowtie2")
+        align_cmd = f"bowtie2 --very-fast-local -k {k} -p {threads} -x {Path(pseudogenome_idx, 'bwt2_idx')} -s -U {multi_fastq} 2> {bwt2_pseudo_log} 1> {tmp_alignment_file}"
+    else:
+        print(f"Aligning {multi_fastq} to pseudogenome using STAR...")
+        align_cmd = f"STAR --runThreadN {threads} --genomeDir {pseudogenome_idx} --readFilesIn {multi_fastq} --outFileNamePrefix {out_prefix}"
     
-    print(f"Aligning {multi_fastq} to pseudogenome using STAR...")
-    align_cmd = f"STAR --runThreadN {threads} --genomeDir {pseudogenome_STAR_idx} --readFilesIn {multi_fastq} --outFileNamePrefix {out_prefix}"
     subprocess.run(align_cmd, shell=True)
 
-    tmp_alignment_file = Path(out_dir, "__tmp_Aligned.out.sam")
-
     # first, count all of the multi-mapped reads
-    counts = count_multi(tmp_alignment_file, mapq)
+    counts = count_multi(tmp_alignment_file)
     mapped_multi_counts = map_counts(counts, element_mapper)
 
     # then use the same alignment file to find the fractional counts
-    frac_counts = count_fractional(tmp_alignment_file, mapq)
+    frac_counts = count_fractional(tmp_alignment_file)
     mapped_frac_counts = map_counts(frac_counts, element_mapper)
 
     # clean the temporary alignment directory
@@ -183,14 +184,14 @@ def summarize(count_data):
     for class_ in count_data:
         for family in count_data[class_]:
             for elem in count_data[class_][family]:
-                count = int(count_data[class_][family][elem])
+                count = float(count_data[class_][family][elem])
                 class_data[class_] += count
     
     # family level counts
     for class_ in count_data:
         for family in count_data[class_]:
             for elem in count_data[class_][family]:
-                count = int(count_data[class_][family][elem])
+                count = float(count_data[class_][family][elem])
                 family_data[class_][family] += count
     
     return class_data, family_data
@@ -220,15 +221,13 @@ def main():
     parser.add_argument('sampleName',help='The name of the sample to be processed. Typically the prefix of the unique.bam file.')
     parser.add_argument('setupFolder',help='path to the fastRE_Setup folder')
     parser.add_argument('uniqueAlignmentFile', help='path/to/sampleName_unique.bam')
-    parser.add_argument('--mapq', default=0, metavar=0, type=int, help="""The MAPQ threshold for multimapped reads, Should be one of [255, 3, 2, 1, 0]. 
-    STAR uses 255 to designate uniquely mapped reads. 3=Read maps to 2 locations, 2=Read maps to 3 locations, 1=Read maps to 4-9 locations, 0=Read maps 
-    to 10 or more locations. The default is set to 0 to allow for all multimapped that align to the pseudogenome to be counted. This setting diverges 
-    from the original RepEnrich2 program since the aligners (STAR vs. bowtie2) use different MAPQ schemes.""")
     parser.add_argument('--pairedEnd', dest='pairedEnd', action='store_true', help='Designate this option for paired-end sequencing.')
     parser.add_argument('--threads', default=1, type=int, metavar=1, help='Number of threads to use for alignment with STAR.')
     parser.add_argument('--summarize', dest='summarize', action='store_true', help='In addition to the repeat name level output, produce collapsed counts at the class and family levels for each of the count types.')
     parser.add_argument('--debug', dest='debug', action='store_true', help='Select this option to prevent the removal of temporary files; useful for debugging')
-    parser.set_defaults(pairedEnd=False, summarize=False, debug=False)
+    parser.add_argument('--bowtieMode', action='store_true', help="Set this flag if you would like to use bowtie2 instead of STAR for all downstream analyses.")
+    parser.add_argument('--k', default=25, type=int, metavar=25, help="Since Bowtie2 reports the single best alignment, k must be set to include up to k <int> alignments when aligning to the pseudogenome. This flag is only used if --bowtieMode is set. Large values for k will take a very long time (hence why bowtie2's -a option is not the default when aligning to pseudogenome).")
+    parser.set_defaults(pairedEnd=False, summarize=False, debug=False, bowtieMode=False)
     args = parser.parse_args()
 
     sample_name = args.sampleName
@@ -237,13 +236,16 @@ def main():
     paired_end = args.pairedEnd
     threads = args.threads
     debug = args.debug
-    mapq = args.mapq
+    bwt2_mode = args.bowtieMode
+    summarize_counts = args.summarize
+    k = args.k
 
     # main count routine ------------------------------------------------------
     # setup outfile paths - saved in same directory as the alignment file
     out_parent = Path(alignment_file).parent
     repnames_bedfile = Path(setup_folder, "repnames.bed")
     pseudogenome_STAR_idx = Path(setup_folder, "STAR_pseudogenome_idx")
+    pseudogenome_bwt2_idx = Path(setup_folder, "bwt2_pseudogenome_idx")
     se_fastq = Path(out_parent, sample_name + "_multimap.fastq")   # The multi fastq files are expected to be in the same directory
     fastq1 = Path(out_parent, sample_name + "_multimap_R1.fastq")  #   as the unique.bam file. This spec may change in the future
     fastq2 = Path(out_parent, sample_name + "_multimap_R2.fastq")
@@ -257,6 +259,11 @@ def main():
     family_uniq_counts_outfile = Path(out_parent, sample_name + "_family_unique_counts.tsv")
     family_fractional_counts_outfile = Path(out_parent, sample_name + "_family_fractional_counts.tsv")
 
+    if bwt2_mode:
+        pseudogenome_idx = pseudogenome_bwt2_idx
+    else:
+        pseudogenome_idx = pseudogenome_STAR_idx
+
     # run the routine
     print(f"Begin processing {sample_name}...")
     cov_res = compute_unique_coverage(alignment_file, repnames_bedfile)
@@ -264,12 +271,12 @@ def main():
     elem_mapper = create_element_mapping(repnames_bedfile)
 
     if paired_end:
-        multi_count1, frac_count1 = align_to_pseudogenome(pseudogenome_STAR_idx, fastq1, elem_mapper, threads, debug, mapq)
-        multi_count2, frac_count2 = align_to_pseudogenome(pseudogenome_STAR_idx, fastq2, elem_mapper, threads, debug, mapq)
+        multi_count1, frac_count1 = align_to_pseudogenome(pseudogenome_idx, fastq1, elem_mapper, threads, debug, bwt2_mode, k)
+        multi_count2, frac_count2 = align_to_pseudogenome(pseudogenome_idx, fastq2, elem_mapper, threads, debug, bwt2_mode, k)
         multi_counts = combine_counts(multi_count1, multi_count2)
         frac_counts = combine_counts(frac_count1, frac_count2)
     else:
-        multi_counts, frac_counts = align_to_pseudogenome(pseudogenome_STAR_idx, se_fastq, elem_mapper, threads, debug, mapq)
+        multi_counts, frac_counts = align_to_pseudogenome(pseudogenome_idx, se_fastq, elem_mapper, threads, debug, bwt2_mode, k)
 
     total_counts = combine_counts(uniq_counts, multi_counts)
     fractional_counts = combine_counts(uniq_counts, frac_counts)
@@ -277,7 +284,7 @@ def main():
     write_output(total_counts, total_counts_outfile)
     write_output(uniq_counts, uniq_counts_outfile)
 
-    if summarize:
+    if summarize_counts:
         print("Writing class-level and family-level summarized counts...")
         class_total, family_total = summarize(total_counts)
         class_uniq, family_uniq = summarize(uniq_counts)
