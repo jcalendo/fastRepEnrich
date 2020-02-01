@@ -12,7 +12,7 @@ def get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end)
 
     if bwt_mode:
         if paired_end:
-            uniq_cmd = f"samtools view -f 3 -q {mapq} -b {uniq} {alignment_file}"
+            uniq_cmd = f"samtools view -f 3 -q {mapq} -b -o {uniq} {alignment_file}"
         else:
             uniq_cmd = f"samtools view -F 4 -q {mapq} -b -o {uniq} {alignment_file}"
     else:
@@ -21,6 +21,7 @@ def get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end)
     print(f"Subsetting unique reads from {alignment_file}...")
     if bwt_mode:
         print(f"\tBowtie2 mode selected. Using {mapq} as the MAPQ quality score to filter on.")
+
     subprocess.run(uniq_cmd, shell=True)
 
 
