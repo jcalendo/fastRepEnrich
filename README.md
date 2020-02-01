@@ -70,6 +70,12 @@ STAR --runThreadN 8 \
 	--genomeSAindexNbases 11             # special setting for chr22
 ```
 
+### Alternatively with bowtie2
+
+```bash
+bowtie2-build data/chr22.fa data/bowtie2_chr22_idx/bwt2_idx
+```
+
 ## 2. Map your samples to the genome, saving individual alignment results in each sample folder
 
 Using STAR for this kind of mapping does not confer any additional benefits over bowtie2 aside from speed. Please see the following links for more information. [link1](https://groups.google.com/forum/#!searchin/rna-star/CHIP-seq%7Csort:date/rna-star/Gq3Gf3NmDNc/yt8uJ1u4AQAJ) [link2](https://groups.google.com/forum/#!searchin/rna-star/repeat$20elements%7Csort:date/rna-star/TqOdXiEFYrI/tbzoK_AV4DQJ) [link3](https://www.biostars.org/p/344389/)
@@ -91,9 +97,31 @@ for samp in $(cat data/sample-names.txt); do
 done
 ```
 
+### Alternatively with bowtie2
+
+```bash
+for samp in $(cat sample-names.txt); do 
+	bowtie2 -q -p 8 -x bowtie2_chr22_idx/bwt2_idx \
+		-1 ${samp}/${samp}_R1.fastq -2 ${samp}/${samp}_R2.fastq \
+		-S ${samp}/${samp}_bwt2_Aligned.out.sam 2> ${samp}/${samp}_bwt2.log;
+done
+```
+
+SAM files will then need to be converted to BAM files for downstream analysis.
+
+```bash
+for samp in $(cat data/sample-names.txt); do 
+	samtools view -bS data/${samp}/${samp}_bwt2_Aligned.out.sam > data/${samp}/${samp}_bwt2_Aligned.out.bam; 
+done
+```
+
 ## 3. Run the fastRE_setup script
 
 `python fastRE_setup.py data/chr22.fa.out data/chr22.fa --threads 8`
+
+If you are running the analysis with bowtie2 then add the `--bowtieMode` flag to the command like so:
+
+`python fastRE_setup.py data/chr22.fa.out data/chr22.fa --threads 8 --bowtieMode`
 
 Here, you can use either the pre-assembled repeatmasker file downloaded from [repeatmasker.org](http://repeatmasker.org/) as is used above, or a custom bed file with the following format:
 
@@ -127,7 +155,21 @@ If using the custom bed file then the `--isBed` flag should be set in you fastRE
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
-	python fastRE_subset.py data/${samp}/${samp}_Aligned.out.bam ${samp} --threads 7 --pairedEnd;
+	python fastRE_subset.py data/${samp}/${samp}_Aligned.out.bam ${samp} 
+		--threads 7 
+		--pairedEnd;
+done
+```
+
+### Alternatively with bowtie2
+
+```bash
+ for samp in $(cat data/sample-names.txt); do 
+ 	python fastRE_subset.py data/${samp}/${samp}_bwt2_Aligned.out.bam ${samp} \
+	 	--pairedEnd \
+	 	--threads 4 \
+		--bowtieMode \
+		--MAPQ 30;  # when bowtieMode is set, the MAPQ must be changed
 done
 ```
 
@@ -137,7 +179,25 @@ The `--summarize` flag below includes counts at both the class and family levels
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
-	python fastRE_count.py ${samp} fastRE_Setup/ data/${samp}/${samp}_unique.bam --pairedEnd --threads 8 --summarize;
+	python fastRE_count.py ${samp} fastRE_Setup/ data/${samp}/${samp}_unique.bam \
+		--pairedEnd \
+		--threads 8 
+		--summarize;
+done
+```
+
+### Alternatively with bowtie2
+
+Importantly, the effective bowtie2 command uses the options `-k` and `--very-fast-local`. These two options perform a very fast local alignment of the multimapped reads to the pseudogenome and report up to `-k` of the alignments found. Choosing a good value for `k` can be tricky. Currently the default is set at 25 *but this is for no good reason*. There is also the option in the future to report all alignments using the `-a` flag instead of `-k` but this can be excrutiatingly slow.
+
+```bash
+for samp in $(cat data/sample-names.txt); do 
+	python fastRE_count.py ${samp} fastRE_Setup/ data/${samp}/${samp}_unique.bam \
+		--pairedEnd \
+		--threads 8 \
+		--summarize \
+		--bowtieMode \
+		--k 25;
 done
 ```
 
