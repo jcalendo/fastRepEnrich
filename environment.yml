@@ -9,3 +9,5 @@ dependencies:
         - samtools=1.9
         - star=2.7.3a
         - bowtie2=2.3.5
+        - pysam=0.15.4
+        - pybedtools=0.8.1

@@ -3,35 +3,30 @@ from collections import defaultdict
 from pathlib import Path
 import argparse
 
+from pybedtools import BedTool
+
 
 def compute_unique_coverage(unique_bam, repnames_bedfile):
     """Use bedtools to calculate the number of unique reads that overlap the repeat ranges"""
     print(f"Computing overlaps between {unique_bam} and {repnames_bedfile}...")
-    parent_uniq_bam = Path(unique_bam).parent
-    uniq_counts = Path(parent_uniq_bam, "_coverage.txt")
-    command = f"bedtools coverage -counts -a {repnames_bedfile} -b {unique_bam} > {uniq_counts}"
-    subprocess.run(command, shell=True)
+    a = BedTool(repnames_bedfile)
+    b = BedTool(unique_bam)
+    c = a.coverage(b, counts=True)
 
-    return Path(uniq_counts)
+    return c
 
 
 def count_unique(coverage_results, debug):
     """Create a dictionary of unique counts from the bedtools coverage output"""
     print("Computing unique counts...")
     counts = defaultdict(lambda : defaultdict(lambda : defaultdict(float)))
-    with open(coverage_results, "r") as cov_res:
-        for line in cov_res:
-            l = line.strip().split()
-            rep_element = l[3]
-            class_ = l[4]
-            family = l[5]
-            count = int(l[6])
-            
-            counts[class_][family][rep_element] += count
-
-    # remove the coverage results - unique counts output later in standard format
-    if not debug:
-        subprocess.run(f"rm {coverage_results}", shell=True)
+    for line in coverage_results:
+        rep_element = line[3]
+        class_ = line[4]
+        family = line[5]
+        count = int(line[6])
+        
+        counts[class_][family][rep_element] += count
     
     return counts
 
@@ -40,7 +35,6 @@ def count_multi(tmp_alignment_file):
     """Create a dictionary of counts for reads mapped to pseudogenome."""
     print("Counting reads overlapped to pseudogenome...")
     counts = defaultdict(float)
-
     with open(tmp_alignment_file, "r") as sam:
         for line in sam:
             if line.startswith("@"):
@@ -219,14 +213,15 @@ def main():
     usage = 'python fastRE_count.py sampleName path/to/fastRE_Setup path/to/sampleName_unique.bam --threads 8 --summarize')
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')
     parser.add_argument('sampleName',help='The name of the sample to be processed. Typically the prefix of the unique.bam file.')
-    parser.add_argument('setupFolder',help='path to the fastRE_Setup folder')
     parser.add_argument('uniqueAlignmentFile', help='path/to/sampleName_unique.bam')
+    parser.add_argument('setupFolder',help='path to the fastRE_Setup folder')
     parser.add_argument('--pairedEnd', dest='pairedEnd', action='store_true', help='Designate this option for paired-end sequencing.')
     parser.add_argument('--threads', default=1, type=int, metavar=1, help='Number of threads to use for alignment with STAR.')
     parser.add_argument('--summarize', dest='summarize', action='store_true', help='In addition to the repeat name level output, produce collapsed counts at the class and family levels for each of the count types.')
     parser.add_argument('--debug', dest='debug', action='store_true', help='Select this option to prevent the removal of temporary files; useful for debugging')
     parser.add_argument('--bowtieMode', action='store_true', help="Set this flag if you would like to use bowtie2 instead of STAR for all downstream analyses.")
     parser.add_argument('--k', default=25, type=int, metavar=25, help="Since Bowtie2 reports the single best alignment, k must be set to include up to k <int> alignments when aligning to the pseudogenome. This flag is only used if --bowtieMode is set. Large values for k will take a very long time (hence why bowtie2's -a option is not the default when aligning to pseudogenome).")
+    parser.add_argument('--outDir', help="Specify the directory to save the count results. Defaults to same parent folder as unique.bam alignment file.")
     parser.set_defaults(pairedEnd=False, summarize=False, debug=False, bowtieMode=False)
     args = parser.parse_args()
 
@@ -239,25 +234,34 @@ def main():
     bwt2_mode = args.bowtieMode
     summarize_counts = args.summarize
     k = args.k
+    out_dir = args.outDir
 
     # main count routine ------------------------------------------------------
-    # setup outfile paths - saved in same directory as the alignment file
-    out_parent = Path(alignment_file).parent
     repnames_bedfile = Path(setup_folder, "repnames.bed")
     pseudogenome_STAR_idx = Path(setup_folder, "STAR_pseudogenome_idx")
     pseudogenome_bwt2_idx = Path(setup_folder, "bwt2_pseudogenome_idx")
-    se_fastq = Path(out_parent, sample_name + "_multimap.fastq")   # The multi fastq files are expected to be in the same directory
-    fastq1 = Path(out_parent, sample_name + "_multimap_R1.fastq")  #   as the unique.bam file. This spec may change in the future
-    fastq2 = Path(out_parent, sample_name + "_multimap_R2.fastq")
-    total_counts_outfile = Path(out_parent, sample_name + "_total_counts.tsv")
-    uniq_counts_outfile = Path(out_parent, sample_name + "_unique_counts.tsv")
-    fractional_counts_outfile = Path(out_parent, sample_name + "_fractional_counts.tsv")
-    class_total_counts_outfile = Path(out_parent, sample_name + "_class_total_counts.tsv")
-    class_uniq_counts_outfile = Path(out_parent, sample_name + "_class_unique_counts.tsv")
-    class_fractional_counts_outfile = Path(out_parent, sample_name + "_class_fractional_counts.tsv")
-    family_total_counts_outfile = Path(out_parent, sample_name + "_family_total_counts.tsv")
-    family_uniq_counts_outfile = Path(out_parent, sample_name + "_family_unique_counts.tsv")
-    family_fractional_counts_outfile = Path(out_parent, sample_name + "_family_fractional_counts.tsv")
+
+    align_parent = Path(alignment_file).parent
+    se_fastq = Path(align_parent, sample_name + "_multimap.fastq")   # The multi fastq files are expected to be in the same directory
+    fastq1 = Path(align_parent, sample_name + "_multimap_R1.fastq")  #   as the unique.bam file. This spec may change in the future
+    fastq2 = Path(align_parent, sample_name + "_multimap_R2.fastq")
+
+    if out_dir:
+        out_directory = Path(out_dir)
+        if not out_directory.exists():
+            out_directory.mkdir()
+    else:
+        out_directory = align_parent
+
+    total_counts_outfile = Path(out_directory, sample_name + "_total_counts.tsv")
+    uniq_counts_outfile = Path(out_directory, sample_name + "_unique_counts.tsv")
+    fractional_counts_outfile = Path(out_directory, sample_name + "_fractional_counts.tsv")
+    class_total_counts_outfile = Path(out_directory, sample_name + "_class_total_counts.tsv")
+    class_uniq_counts_outfile = Path(out_directory, sample_name + "_class_unique_counts.tsv")
+    class_fractional_counts_outfile = Path(out_directory, sample_name + "_class_fractional_counts.tsv")
+    family_total_counts_outfile = Path(out_directory, sample_name + "_family_total_counts.tsv")
+    family_uniq_counts_outfile = Path(out_directory, sample_name + "_family_unique_counts.tsv")
+    family_fractional_counts_outfile = Path(out_directory, sample_name + "_family_fractional_counts.tsv")
 
     if bwt2_mode:
         pseudogenome_idx = pseudogenome_bwt2_idx

@@ -5,7 +5,7 @@ from pathlib import Path
 from os import devnull, getcwd
 
 import pysam
-import pybedtools
+from pybedtools import BedTool
 
 
 def get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end):
@@ -54,14 +54,15 @@ def multi_to_fastq(sample_name, multi_bam, paired_end, alignment_file, threads):
     
     if not paired_end:
         print(f"Writing multi-mapped reads to {out_SE}...")
-        bamfile = pybedtools.BedTool(multi_bam)
-        pybedtools.BedTool.bam_to_fastq(bamfile, fq=out_SE)
+        bamfile = BedTool(multi_bam)
+        BedTool.bam_to_fastq(bamfile, fq=out_SE)
     else:
         print("Sorting multi-mapped reads...")
         pysam.sort("--threads", f"{threads}", "-n", "-o", f"{srt_multi_bam}", f"{multi_bam}")
-        sorted_bamfile = pybedtools.BedTool(srt_multi_bam)
+        sorted_bamfile = BedTool(srt_multi_bam)
         print(f"Writing multi-mapped reads to {out_R1} {out_R2}...")
-        pybedtools.BedTool.bam_to_fastq(sorted_bamfile, fq=out_R1, fq2=out_R2)
+        BedTool.bam_to_fastq(sorted_bamfile, fq=out_R1, fq2=out_R2)
+
 
 def cleanup(alignment_file, debug):
     """remove intermediate files"""
