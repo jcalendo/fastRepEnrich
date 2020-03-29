@@ -8,6 +8,8 @@ from collections import defaultdict
 from pathlib import Path
 import argparse
 
+import pysam
+
 
 def combine_counts(counts1, counts2):
     """Generic function for combining two dictionaries of count data"""
@@ -26,7 +28,7 @@ def combine_counts(counts1, counts2):
     return total_counts
 
 
-def count(pseudogenome_sam):
+def count(pseudogenome_bam):
     """Return Unique, fractional and total counts from parsing the pseudogenome"""
     print("Counting reads overlapped to pseudogenome...")
     uniq_counts = defaultdict(float)
@@ -35,23 +37,19 @@ def count(pseudogenome_sam):
     frac_counts = defaultdict(float)
 
     # calculate uniq counts and tally multi counts
-    with open(pseudogenome_sam, "r") as sam:
-        for line in sam:
-            if line.startswith("@"):
-                continue  # skip headers
-            else:
-                l = line.strip().split("\t")
-                read_id = l[0]
-                rep_element = l[2]
-                mapq = int(l[4])
+    with pysam.AlignmentFile(pseudogenome_bam, "rb") as bam:
+        for segment in bam:
+            mapq = segment.mapping_quality
+            rep_element = segment.reference_name
+            read_id = segment.query_name
 
-                # tally total counts for all rep elemnets in the alignment
-                total_counts[rep_element] += 1
+            # tally total counts for all rep elemnets in the alignment
+            total_counts[rep_element] += 1
 
-                if mapq == 255:  # calculate unique counts
-                    uniq_counts[rep_element] += 1
-                else:            # tally the sub families that a read multimaps to
-                    frac_numerator[read_id][rep_element] = 1  # every element gets numerator 1 (even if observed multiple times)
+            if mapq == 255:  # calculate unique counts
+                uniq_counts[rep_element] += 1
+            else:            # tally the sub families that a read multimaps to
+                frac_numerator[read_id][rep_element] = 1  # every element gets numerator 1 (even if observed multiple times)
 
     # calculating fractional counts
     for read_id in frac_numerator.keys():
@@ -148,29 +146,37 @@ def write_family_summary(family_counts, outfile):
 
 def main():
     parser = argparse.ArgumentParser(prog="count_from_pseudoalignment.py",
-                                    usage="count_from_pseudoalignment.py file_prefix in.sam repnames.bed")
+                                    usage="count_from_pseudoalignment.py file_prefix in.bam repnames.bed")
     parser.add_argument('file_prefix', help="Sample name to prefix the results files with")
-    parser.add_argument('in_sam', help="SAM file of reads aligned to the pseudogenome")
+    parser.add_argument('in_bam', help="BAM file of reads aligned to the pseudogenome")
     parser.add_argument('annotation_file', help="bedfile of repeat annotation file")
+    parser.add_argument('--out_dir', help="Location to save the results. Defaults to bamfile parent directory.")
     args = parser.parse_args()
 
     file_prefix = args.file_prefix
-    samfile = args.in_sam
+    bamfile = args.in_bam
     repnames_bed = args.annotation_file
+    out_dir = args.out_dir
 
     # Set up outfile names-----------------------------------------------------
-    sam_parent = Path(samfile).parent
-    uniq_out = Path(sam_parent, f"{file_prefix}_unique_counts.tsv")
-    frac_out = Path(sam_parent, f"{file_prefix}_fractional_counts.tsv")
-    total_out = Path(sam_parent, f"{file_prefix}_total_counts.tsv")
-    uniq_family_out = Path(sam_parent, f"{file_prefix}_family_unique_counts.tsv")
-    frac_family_out = Path(sam_parent, f"{file_prefix}_family_fractional_counts.tsv")
-    total_family_out = Path(sam_parent, f"{file_prefix}_family_total_counts.tsv")
-    uniq_class_out = Path(sam_parent, f"{file_prefix}_class_unique_counts.tsv")
-    frac_class_out = Path(sam_parent, f"{file_prefix}_class_fractional_counts.tsv")
-    total_class_out = Path(sam_parent, f"{file_prefix}_class_total_counts.tsv")
+    if out_dir:
+        out_directory = Path(out_dir)
+        if not out_directory.exists():
+            out_directory.mkdir()
+    else:
+        out_directory = Path(bamfile).parent
 
-    uniq, frac, tot = count(samfile)
+    uniq_out = Path(out_directory, f"{file_prefix}_unique_counts.tsv")
+    frac_out = Path(out_directory, f"{file_prefix}_fractional_counts.tsv")
+    total_out = Path(out_directory, f"{file_prefix}_total_counts.tsv")
+    uniq_family_out = Path(out_directory, f"{file_prefix}_family_unique_counts.tsv")
+    frac_family_out = Path(out_directory, f"{file_prefix}_family_fractional_counts.tsv")
+    total_family_out = Path(out_directory, f"{file_prefix}_family_total_counts.tsv")
+    uniq_class_out = Path(out_directory, f"{file_prefix}_class_unique_counts.tsv")
+    frac_class_out = Path(out_directory, f"{file_prefix}_class_fractional_counts.tsv")
+    total_class_out = Path(out_directory, f"{file_prefix}_class_total_counts.tsv")
+
+    uniq, frac, tot = count(bamfile)
     elem_mapper = create_element_mapping(repnames_bed)
     uniq_counts = map_counts(uniq, elem_mapper)
     frac_counts = map_counts(frac, elem_mapper)
