@@ -4,6 +4,9 @@ import subprocess
 from pathlib import Path
 from os import devnull, getcwd
 
+import pysam
+import pybedtools
+
 
 def get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end):
     """Subset unique reads from alignment file"""
@@ -12,17 +15,15 @@ def get_unique(sample_name, alignment_file, threads, mapq, bwt_mode, paired_end)
 
     if bwt_mode:
         if paired_end:
-            uniq_cmd = f"samtools view -f 3 -q {mapq} -b -o {uniq} {alignment_file}"
+            pysam.view("-f", "3", "-q", f"{mapq}", "-b", "-o", f"{uniq}", f"{alignment_file}", catch_stdout=False)
         else:
-            uniq_cmd = f"samtools view -F 4 -q {mapq} -b -o {uniq} {alignment_file}"
+            pysam.view("-F", "4", "-q", f"{mapq}", "-b", "-o", f"{uniq}", f"{alignment_file}", catch_stdout=False)
     else:
-        uniq_cmd = f"samtools view --threads {threads} -q {mapq} -b -o {uniq} {alignment_file}"
+        pysam.view("--threads", f"{threads}", "-q", f"{mapq}", "-b", "-o", f"{uniq}", f"{alignment_file}", catch_stdout=False)
 
     print(f"Subsetting unique reads from {alignment_file}...")
     if bwt_mode:
         print(f"\tBowtie2 mode selected. Using {mapq} as the MAPQ quality score to filter on.")
-
-    subprocess.run(uniq_cmd, shell=True)
 
 
 def get_multimapped(alignment_file, threads, mapq, bwt_mode, paired_end):
@@ -31,20 +32,15 @@ def get_multimapped(alignment_file, threads, mapq, bwt_mode, paired_end):
     multi_bam = Path(algn_parent, "_multi.bam")
     proper_pair = Path(algn_parent, "_proper_pair.bam")
 
+    print(f"Subsetting Multi-mapped reads...")
     if bwt_mode:
         if paired_end:
-            # create intermediate file of all reads in a proper pair
-            pp_cmd = f"samtools view --threads {threads} -f 3 -b -o {proper_pair} {alignment_file}"
-            subprocess.run(pp_cmd, shell=True)
-            # filter properly paired reads on their MAPQ
-            multi_cmd = f"samtools view --threads {threads} -q {mapq} -b -U {multi_bam} {proper_pair} > {devnull}"
+            pysam.view("--threads", f"{threads}", "-f", "3", "-b", "-o", f"{proper_pair}", f"{alignment_file}", catch_stdout=False)
+            pysam.view("--threads", f"{threads}", "-q", f"{mapq}", "-b", "-U", f"{multi_bam}", f"{proper_pair}", catch_stdout=True)
         else:
-            multi_cmd = f"samtools view --threads {threads} -F 4 -q {mapq} -b -U {multi_bam} {alignment_file} > {devnull}"
+            pysam.view("--threads", f"{threads}", "-F", "4", "-q", f"{mapq}", "-b", "-U", f"{multi_bam}", f"{alignment_file}", catch_stdout=True)
     else:
-        multi_cmd = f"samtools view --threads {threads} -q {mapq} -b -U {multi_bam} {alignment_file} > {devnull}"
-    
-    print(f"Subsetting Multi-mapped reads...")
-    subprocess.run(multi_cmd, shell=True)
+        pysam.view("--threads", f"{threads}", "-q", f"{mapq}", "-b", "-U", f"{multi_bam}", f"{alignment_file}", catch_stdout=True)
 
     return multi_bam
 
@@ -58,16 +54,14 @@ def multi_to_fastq(sample_name, multi_bam, paired_end, alignment_file, threads):
     
     if not paired_end:
         print(f"Writing multi-mapped reads to {out_SE}...")
-        fastq_cmd = f"samtools fastq --threads {threads} -F 0x900 {multi_bam} > {out_SE}"
+        bamfile = pybedtools.BedTool(multi_bam)
+        pybedtools.BedTool.bam_to_fastq(bamfile, fq=out_SE)
     else:
         print("Sorting multi-mapped reads...")
-        srt_cmd = f"samtools sort --threads {threads} -n -o {srt_multi_bam} {multi_bam}"
-        subprocess.run(srt_cmd, shell=True)
+        pysam.sort("--threads", f"{threads}", "-n", "-o", f"{srt_multi_bam}", f"{multi_bam}")
+        sorted_bamfile = pybedtools.BedTool(srt_multi_bam)
         print(f"Writing multi-mapped reads to {out_R1} {out_R2}...")
-        fastq_cmd = f"samtools fastq --threads {threads} -1 {out_R1} -2 {out_R2} -0 {devnull} -s {devnull} -n -F 0x900 {srt_multi_bam}"
-    
-    subprocess.run(fastq_cmd, shell=True)
-
+        pybedtools.BedTool.bam_to_fastq(sorted_bamfile, fq=out_R1, fq2=out_R2)
 
 def cleanup(alignment_file, debug):
     """remove intermediate files"""
