@@ -80,8 +80,8 @@ def main():
     parser = argparse.ArgumentParser(description="Prepartion for downstream analysis with fastRE_count.py. Subsets unique and multi-mapped reads and creates fastq files for multi-mapped reads.", 
     usage = "python fastRE_subset.py path/to/sampleName_Aligned.out.bam sampleName --threads 8")
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')
-    parser.add_argument('alignmentFile',help='bam file of aligned reads. Example : path/to/sampleName_Aligned.out.bam')
     parser.add_argument('sampleName', help='The name of your sample (used to generate the name of the output files)')
+    parser.add_argument('alignmentFile',help='bam file of aligned reads. Example : path/to/sampleName_Aligned.out.bam')
     parser.add_argument('--pairedEnd', dest='pairedEnd', action='store_true', help='Designate this option for paired-end data.')
     parser.add_argument('--threads', default=0, type=int, metavar=0, help='Additional number of threads to use in samtools calls.')
     parser.add_argument('--debug', dest='debug', action='store_true', help='Select this option to prevent the removal of temporary files; useful for debugging')
