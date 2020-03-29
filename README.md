@@ -80,7 +80,7 @@ bowtie2-build data/chr22.fa data/bowtie2_chr22_idx/bwt2_idx
 
 Using STAR for this kind of mapping does not confer any additional benefits over bowtie2 aside from speed. Please see the following links for more information. [link1](https://groups.google.com/forum/#!searchin/rna-star/CHIP-seq%7Csort:date/rna-star/Gq3Gf3NmDNc/yt8uJ1u4AQAJ) [link2](https://groups.google.com/forum/#!searchin/rna-star/repeat$20elements%7Csort:date/rna-star/TqOdXiEFYrI/tbzoK_AV4DQJ) [link3](https://www.biostars.org/p/344389/)
 
-The `--outFilterMultimapNmax 100` flag allows reads to align to N (100) different loci before being flagged as unmapped. **This flag is necessary for downstream analysis as it allows for multimapping reads (the default is set to 20 if not explicitly set)**. Additionally, in order to mimic the behavior of `bowtie2` we set the alignment type to end-to-end wth the `--alignEndsType EndToEnd` flag. The default `STAR` alignment method is local with soft-clipping allowed. We also set the `--alignIntronMin 1` flag to prohibit splicing.
+The `--outFilterMultimapNmax 100` flag allows reads to align to N (100) different loci before being flagged as unmapped. **This flag is necessary for downstream analysis as it allows for multimapping reads (the default is set to 20 if not explicitly set)**. Additionally, in order to mimic the behavior of `bowtie2` we set the alignment type to end-to-end wth the `--alignEndsType EndToEnd` flag. The default `STAR` alignment method is local with soft-clipping allowed. We also set the `--alignIntron(Min/Max) 1` flag to prohibit splicing.
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
@@ -88,7 +88,7 @@ for samp in $(cat data/sample-names.txt); do
 	--genomeDir data/STAR_chr22_idx/ \
 	--readFilesIn data/${samp}/${samp}_R1.fastq data/${samp}/${samp}_R2.fastq \
 	--outSAMtype BAM Unsorted \
-	--outFilterMultimapNmax 100 \
+	--outFilterMultimapNmax 200 \
 	--outMultimapperOrder Random \
 	--outFileNamePrefix data/${samp}/${samp}_ \
 	--alignEndsType EndToEnd \
@@ -155,8 +155,8 @@ If using the custom bed file then the `--isBed` flag should be set in you fastRE
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
-	python fastRE_subset.py data/${samp}/${samp}_Aligned.out.bam ${samp} 
-		--threads 7 
+	python fastRE_subset.py ${samp} data/${samp}/${samp}_Aligned.out.bam \
+		--threads 7 \
 		--pairedEnd;
 done
 ```
@@ -165,7 +165,7 @@ done
 
 ```bash
  for samp in $(cat data/sample-names.txt); do 
- 	python fastRE_subset.py data/${samp}/${samp}_bwt2_Aligned.out.bam ${samp} \
+ 	python fastRE_subset.py ${samp} data/${samp}/${samp}_bwt2_Aligned.out.bam \
 	 	--pairedEnd \
 	 	--threads 4 \
 		--bowtieMode \
@@ -179,7 +179,7 @@ The `--summarize` flag below includes counts at both the class and family levels
 
 ```bash
 for samp in $(cat data/sample-names.txt); do
-	python fastRE_count.py ${samp} fastRE_Setup/ data/${samp}/${samp}_unique.bam \
+	python fastRE_count.py ${samp} data/${samp}/${samp}_unique.bam fastRE_Setup/ \
 		--pairedEnd \
 		--threads 8 
 		--summarize;
@@ -192,7 +192,7 @@ Importantly, the effective bowtie2 command uses the options `-k` and `--very-fas
 
 ```bash
 for samp in $(cat data/sample-names.txt); do 
-	python fastRE_count.py ${samp} fastRE_Setup/ data/${samp}/${samp}_unique.bam \
+	python fastRE_count.py ${samp} data/${samp}/${samp}_unique.bam fastRE_Setup/ \
 		--pairedEnd \
 		--threads 8 \
 		--summarize \
@@ -201,4 +201,4 @@ for samp in $(cat data/sample-names.txt); do
 done
 ```
 
-Each sample sub-folder will now contain all of the count data produced by fastRE as .tsv files. Use this data as input for differential expression analysis. The sample folders will also contain all of the information from the alignment steps contained in the `sampleName_Log.final.out` files.
+Each sample sub-folder will now contain all of the count data produced by fastRE as .tsv files. The location to save the results in can be changed by setting the `--outDir` flag to the desired output directory. Use this data as input for differential expression analysis. The sample folders will also contain all of the information from the alignment steps contained in the `sampleName_Log.final.out` files.
